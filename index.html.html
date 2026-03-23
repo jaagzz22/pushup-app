@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Push-up Counter</title>
+<link rel="manifest" href="manifest.json">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Push-ups">
+<meta name="theme-color" content="#bf60ff">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap');
+
+:root {
+  --bg: #06030d;
+  --surface: #111;
+  --accent: #bf60ff;
+  --accent2: #8833cc;
+  --accent-rgb: 191,96,255;
+  --red: #ff3b3b;
+  --muted: #2a2a2a;
+  --muted2: #333;
+  --text: #f0f0f0;
+  --dim: #555;
+  --dim2: #888;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; }
+html, body { height:100%; width:100%; background:var(--bg); color:var(--text); font-family:'DM Mono',monospace; overflow:hidden; touch-action:manipulation; }
+body { display:flex; flex-direction:column; align-items:center; padding:28px 20px 24px; position:relative; min-height:100svh; justify-content:space-between; }
+
+body::before { content:''; position:fixed; inset:0; background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E"); pointer-events:none; z-index:0; }
+body::after { content:''; position:fixed; width:340px; height:340px; background:radial-gradient(circle, rgba(var(--accent-rgb),0.06) 0%, transparent 70%); top:18%; left:50%; transform:translateX(-50%); pointer-events:none; z-index:0; }
+
+#particleCanvas { position:fixed; inset:0; pointer-events:none; z-index:5; }
+
+/* ── HEADER ── */
+.header { width:100%; display:flex; justify-content:space-between; align-items:flex-start; z-index:1; }
+.logo-title { font-family:'Bebas Neue',sans-serif; font-size:11px; letter-spacing:5px; color:var(--dim2); text-transform:uppercase; }
+.logo-sub { font-family:'Bebas Neue',sans-serif; font-size:20px; letter-spacing:2px; color:var(--text); line-height:1; }
+.header-right { display:flex; align-items:flex-start; gap:12px; }
+.record-label { font-size:8px; letter-spacing:3px; color:var(--dim); text-transform:uppercase; }
+.record-val { font-family:'Bebas Neue',sans-serif; font-size:26px; line-height:1; color:var(--accent); }
+.btn-settings { width:34px; height:34px; background:var(--surface); border:1px solid var(--muted2); border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; margin-top:2px; transition:all 0.1s; }
+.btn-settings:active { background:var(--muted); transform:scale(0.93); }
+
+/* ── GAUGE ── */
+.gauge-wrap { z-index:1; position:relative; display:flex; align-items:center; justify-content:center; }
+.gauge-svg { transform:rotate(-90deg); }
+.gauge-bg { fill:none; stroke:var(--muted); stroke-width:6; }
+.gauge-fill { fill:none; stroke-width:6; stroke-linecap:round; stroke-dasharray:565.48; stroke-dashoffset:565.48; transition:stroke-dashoffset 0.5s cubic-bezier(0.34,1.56,0.64,1); }
+.gauge-ticks { position:absolute; inset:0; transform:rotate(-90deg); }
+.gauge-center { position:absolute; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.gauge-count { font-family:'Bebas Neue',sans-serif; font-size:clamp(60px,17vw,84px); line-height:0.85; color:var(--text); }
+.gauge-count.pop { animation:numPop 0.3s cubic-bezier(0.34,1.56,0.64,1); }
+@keyframes numPop { 0%{transform:scale(1)} 45%{transform:scale(1.14)} 100%{transform:scale(1)} }
+.gauge-label { font-size:9px; letter-spacing:4px; color:var(--dim); text-transform:uppercase; margin-top:4px; }
+.gauge-pct { font-size:11px; letter-spacing:2px; color:var(--dim2); margin-top:2px; }
+
+.milestone-badge { position:absolute; top:-8px; right:-8px; background:var(--accent); color:var(--bg); font-family:'Bebas Neue',sans-serif; font-size:13px; letter-spacing:1px; padding:3px 8px; border-radius:2px; opacity:0; transform:scale(0.7) translateY(4px); transition:opacity 0.2s, transform 0.3s cubic-bezier(0.34,1.56,0.64,1); pointer-events:none; white-space:nowrap; }
+.milestone-badge.show { opacity:1; transform:scale(1) translateY(0); }
+
+/* goal toast */
+.goal-toast { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:15; background:var(--accent); color:#000; font-family:'Bebas Neue',sans-serif; font-size:26px; letter-spacing:4px; padding:14px 32px; border-radius:8px; pointer-events:none; opacity:0; white-space:nowrap; }
+.goal-toast.pop { animation:toastPop 1.8s ease forwards; }
+@keyframes toastPop { 0%{opacity:0;transform:translate(-50%,-50%) scale(0.8)} 15%{opacity:1;transform:translate(-50%,-50%) scale(1.05)} 25%{transform:translate(-50%,-50%) scale(1)} 75%{opacity:1} 100%{opacity:0;transform:translate(-50%,-56%)} }
+
+/* rainbow text */
+.rainbow-text { background:linear-gradient(90deg,#ff0080,#ff7700,#ffe000,#00ff88,#00cfff,#a040ff,#ff0080); background-size:200% auto; -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; animation:rainbowShimmer 2.5s linear infinite; }
+@keyframes rainbowShimmer { to { background-position:200% center; } }
+
+/* ── CHRONO ── */
+.chrono-bar { z-index:1; width:100%; display:flex; align-items:center; justify-content:space-between; padding:8px 14px; background:var(--surface); border:1px solid var(--muted); border-radius:6px; gap:10px; }
+.chrono-time { font-family:'Bebas Neue',sans-serif; font-size:30px; letter-spacing:3px; line-height:1; color:var(--dim2); transition:color 0.2s; }
+.chrono-time.running { color:var(--accent); }
+.chrono-lbl { font-size:8px; letter-spacing:3px; color:var(--dim); text-transform:uppercase; margin-top:2px; }
+.chrono-btns { display:flex; gap:6px; }
+.btn-chr { height:32px; padding:0 12px; border-radius:5px; border:1px solid var(--muted2); background:var(--muted); color:var(--dim2); font-family:'DM Mono',monospace; font-size:9px; letter-spacing:2px; text-transform:uppercase; cursor:pointer; transition:all 0.1s; white-space:nowrap; }
+.btn-chr:active { transform:scale(0.94); }
+.btn-chr.go { border-color:var(--accent); color:var(--accent); background:rgba(var(--accent-rgb),0.07); }
+.btn-chr.pause { border-color:var(--red); color:var(--red); background:rgba(255,59,59,0.07); }
+.btn-chr.rst { font-size:15px; padding:0 10px; }
+
+/* ── SERIES ROW ── */
+.series-row { z-index:1; width:100%; display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:var(--surface); border:1px solid var(--muted); border-radius:6px; }
+.s-block { display:flex; flex-direction:column; align-items:center; gap:2px; }
+.s-val { font-family:'Bebas Neue',sans-serif; font-size:26px; line-height:1; color:var(--text); }
+.s-lbl { font-size:8px; letter-spacing:3px; color:var(--dim); text-transform:uppercase; }
+.s-div { width:1px; height:34px; background:var(--muted2); }
+
+/* ── ADD BUTTONS ── */
+.add-section { z-index:1; width:100%; display:flex; flex-direction:column; gap:8px; }
+.add-lbl { font-size:8px; letter-spacing:4px; color:var(--dim); text-transform:uppercase; text-align:center; }
+.add-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+.btn-add { height:60px; background:var(--surface); border:1px solid var(--muted2); border-radius:6px; color:var(--text); font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:1px; cursor:pointer; transition:transform 0.1s, border-color 0.1s; position:relative; overflow:hidden; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:1px; }
+.btn-add-sub { font-family:'DM Mono',monospace; font-size:8px; letter-spacing:1px; color:var(--dim); font-weight:400; }
+.btn-add:active { transform:scale(0.95); border-color:var(--accent); }
+.btn-add.big { border-color:var(--accent); color:var(--accent); }
+.btn-add.big .btn-add-sub { color:var(--accent2); }
+.ripple { position:absolute; border-radius:50%; background:rgba(var(--accent-rgb),0.28); width:10px; height:10px; transform:scale(0); animation:rpl 0.45s ease-out forwards; pointer-events:none; }
+@keyframes rpl { to { transform:scale(16); opacity:0; } }
+
+/* ── BOTTOM ── */
+.bottom-row { z-index:1; width:100%; display:flex; gap:8px; }
+.btn-ctrl { flex:1; height:44px; background:var(--surface); border:1px solid var(--muted); border-radius:6px; color:var(--dim2); font-family:'DM Mono',monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; cursor:pointer; transition:all 0.1s; }
+.btn-ctrl:active { background:var(--muted); color:var(--text); }
+.btn-ctrl.danger { border-color:#2a1111; color:#a03030; }
+.btn-ctrl.danger:active { background:#1a0808; color:var(--red); }
+
+/* ── SETTINGS ── */
+.s-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:30; align-items:flex-end; justify-content:center; }
+.s-overlay.open { display:flex; }
+.s-panel { width:100%; max-width:480px; background:var(--surface); border-radius:16px 16px 0 0; border-top:1px solid var(--muted2); padding:0 0 36px; animation:slideUp 0.3s cubic-bezier(0.34,1.3,0.64,1); max-height:90svh; overflow-y:auto; }
+@keyframes slideUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+.s-handle { width:36px; height:4px; background:var(--muted2); border-radius:2px; margin:12px auto 18px; }
+.s-title { font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:3px; color:var(--text); padding:0 20px; margin-bottom:18px; }
+.s-section { padding:0 20px; margin-bottom:20px; }
+.s-section-lbl { font-size:8px; letter-spacing:4px; color:var(--dim); text-transform:uppercase; margin-bottom:10px; display:block; }
+
+.lang-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+.btn-lang { padding:10px 4px; background:var(--muted); border:1px solid transparent; border-radius:6px; color:var(--dim2); font-family:'DM Mono',monospace; font-size:10px; cursor:pointer; text-align:center; transition:all 0.1s; }
+.btn-lang:active { transform:scale(0.95); }
+.btn-lang.on { background:rgba(var(--accent-rgb),0.1); border-color:var(--accent); color:var(--accent); }
+.btn-lang .flag { display:block; font-size:20px; margin-bottom:3px; }
+
+/* color grid */
+.color-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+.btn-theme { height:48px; border-radius:8px; border:2px solid transparent; cursor:pointer; transition:transform 0.12s, border-color 0.12s; position:relative; overflow:hidden; }
+.btn-theme:active { transform:scale(0.92); }
+.btn-theme.on { border-color:#fff; box-shadow:0 0 0 1px rgba(255,255,255,0.25); }
+.btn-theme.on::after { content:'✓'; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:18px; color:#fff; font-weight:700; text-shadow:0 1px 4px rgba(0,0,0,0.7); display:flex; }
+
+/* custom color */
+.custom-row { display:flex; gap:10px; align-items:center; margin-top:10px; }
+.custom-lbl { font-size:9px; letter-spacing:2px; color:var(--dim); text-transform:uppercase; flex:1; }
+.color-picker-wrap { width:48px; height:36px; border-radius:6px; overflow:hidden; border:1px solid var(--muted2); cursor:pointer; position:relative; }
+input[type=color] { position:absolute; inset:-4px; width:calc(100% + 8px); height:calc(100% + 8px); border:none; cursor:pointer; }
+
+/* toggle row */
+.t-row { display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--muted); }
+.t-row:last-child { border-bottom:none; }
+.t-lbl { font-size:11px; letter-spacing:1px; color:var(--text); }
+.t-sub { font-size:9px; color:var(--dim); margin-top:2px; }
+.toggle { width:46px; height:26px; background:var(--muted2); border-radius:13px; position:relative; cursor:pointer; border:none; transition:background 0.2s; flex-shrink:0; }
+.toggle.on { background:var(--accent); }
+.toggle::after { content:''; position:absolute; width:20px; height:20px; background:#fff; border-radius:50%; top:3px; left:3px; transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1); }
+.toggle.on::after { transform:translateX(20px); }
+
+/* record edit */
+.rec-row { display:flex; gap:8px; align-items:center; }
+.rec-input { flex:1; background:var(--muted); border:1px solid var(--muted2); border-radius:6px; color:var(--text); font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:2px; padding:10px 14px; text-align:center; outline:none; transition:border-color 0.1s; }
+.rec-input:focus { border-color:var(--accent); }
+.btn-rec-save { padding:10px 16px; background:var(--accent); border:none; border-radius:6px; color:#000; font-family:'Bebas Neue',sans-serif; font-size:16px; letter-spacing:2px; cursor:pointer; white-space:nowrap; transition:transform 0.1s; }
+.btn-rec-save:active { transform:scale(0.95); }
+.btn-rec-reset { width:100%; margin-top:8px; padding:10px; background:transparent; border:1px solid #2a1111; border-radius:6px; color:#a03030; font-family:'DM Mono',monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; cursor:pointer; transition:all 0.1s; }
+.btn-rec-reset:active { background:#1a0808; color:var(--red); }
+.btn-s-close { width:calc(100% - 40px); margin:4px 20px 0; height:50px; background:var(--muted); border:none; border-radius:8px; color:var(--dim2); font-family:'Bebas Neue',sans-serif; font-size:18px; letter-spacing:3px; cursor:pointer; transition:all 0.1s; }
+.btn-s-close:active { background:var(--muted2); color:var(--text); }
+
+/* rainbow button */
+@keyframes rbBtn { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+</style>
+</head>
+<body>
+
+<canvas id="particleCanvas"></canvas>
+<div class="goal-toast" id="goalToast">💪 100 !</div>
+
+<!-- HEADER -->
+<div class="header">
+  <div>
+    <div class="logo-title" data-i18n="counter">Compteur</div>
+    <div class="logo-sub" data-i18n="pushups">de Pompes</div>
+  </div>
+  <div class="header-right">
+    <div>
+      <div class="record-label" data-i18n="record">Record total</div>
+      <div class="record-val" id="recordVal">—</div>
+    </div>
+    <button class="btn-settings" onclick="openSettings()">⚙️</button>
+  </div>
+</div>
+
+<!-- GAUGE -->
+<div class="gauge-wrap">
+  <svg class="gauge-svg" id="gaugeSvg" width="200" height="200" viewBox="0 0 200 200">
+    <defs>
+      <linearGradient id="rbGrad" x1="0%" y1="0%" x2="100%" y2="0%" gradientUnits="userSpaceOnUse">
+        <stop offset="0%"   stop-color="#ff0080"/>
+        <stop offset="20%"  stop-color="#ff7700"/>
+        <stop offset="40%"  stop-color="#ffe000"/>
+        <stop offset="60%"  stop-color="#00ff88"/>
+        <stop offset="80%"  stop-color="#00cfff"/>
+        <stop offset="100%" stop-color="#a040ff"/>
+        <animateTransform attributeName="gradientTransform" type="rotate" from="0 100 100" to="360 100 100" dur="3s" repeatCount="indefinite"/>
+      </linearGradient>
+    </defs>
+    <circle class="gauge-bg" cx="100" cy="100" r="90"/>
+    <circle class="gauge-fill" id="gaugeFill" cx="100" cy="100" r="90" stroke="url(#rbGrad)"/>
+  </svg>
+  <svg width="200" height="200" viewBox="0 0 200 200" style="position:absolute;inset:0;transform:rotate(-90deg);">
+    <circle cx="190" cy="100" r="5" id="tick25" fill="#333"/>
+    <circle cx="100" cy="10"  r="5" id="tick50" fill="#333"/>
+    <circle cx="10"  cy="100" r="5" id="tick75" fill="#333"/>
+  </svg>
+  <div class="gauge-center">
+    <div class="gauge-count rainbow-text" id="counterEl">0</div>
+    <div class="gauge-label" data-i18n="pushups_label">pompes</div>
+    <div class="gauge-pct" id="gaugePct">0 / 100</div>
+  </div>
+  <div class="milestone-badge" id="milestoneBadge"></div>
+</div>
+
+<!-- CHRONO -->
+<div class="chrono-bar">
+  <div>
+    <div class="chrono-time" id="chronoTime">00:00</div>
+    <div class="chrono-lbl" data-i18n="chrono">Chronomètre</div>
+  </div>
+  <div class="chrono-btns">
+    <button class="btn-chr go" id="btnChrono" onclick="chronoToggle()">▶ Start</button>
+    <button class="btn-chr rst" onclick="chronoReset()">↺</button>
+  </div>
+</div>
+
+<!-- SERIES ROW -->
+<div class="series-row">
+  <div class="s-block">
+    <div class="s-val" id="seriesCount">0</div>
+    <div class="s-lbl" data-i18n="sets">Séries</div>
+  </div>
+  <div class="s-div"></div>
+  <div class="s-block">
+    <div class="s-val" id="lastAdded">—</div>
+    <div class="s-lbl" data-i18n="last_set">Dernière</div>
+  </div>
+  <div class="s-div"></div>
+  <div class="s-block">
+    <div class="s-val" id="avgSeries">—</div>
+    <div class="s-lbl" data-i18n="avg">Moy.</div>
+  </div>
+</div>
+
+<!-- ADD BUTTONS -->
+<div class="add-section">
+  <div class="add-lbl" data-i18n="add_label">Ajouter des pompes</div>
+  <div class="add-grid">
+    <button class="btn-add" onclick="add(1,this)">
+      <span>+1</span><span class="btn-add-sub" data-i18n="pushup_s">pompe</span>
+    </button>
+    <button class="btn-add" onclick="add(5,this)">
+      <span>+5</span><span class="btn-add-sub" data-i18n="pushups_s">pompes</span>
+    </button>
+    <button class="btn-add" onclick="add(10,this)">
+      <span>+10</span><span class="btn-add-sub" data-i18n="pushups_s">pompes</span>
+    </button>
+    <button class="btn-add big" onclick="add(20,this)">
+      <span>+20</span><span class="btn-add-sub" data-i18n="pushups_s">pompes</span>
+    </button>
+  </div>
+</div>
+
+<!-- BOTTOM -->
+<div class="bottom-row">
+  <button class="btn-ctrl" onclick="undoLast()" data-i18n="undo">↩ Annuler</button>
+  <button class="btn-ctrl" onclick="showHistory()" data-i18n="history">Historique</button>
+  <button class="btn-ctrl danger" onclick="resetSession()" data-i18n="reset">Réinitialiser</button>
+</div>
+
+<!-- SETTINGS -->
+<div class="s-overlay" id="sOverlay" onclick="overlayClick(event)">
+  <div class="s-panel">
+    <div class="s-handle"></div>
+    <div class="s-title" data-i18n="settings_title">Paramètres</div>
+
+    <!-- Langue -->
+    <div class="s-section">
+      <span class="s-section-lbl" data-i18n="language">Langue</span>
+      <div class="lang-grid">
+        <button class="btn-lang" onclick="setLang('fr')"><span class="flag">🇫🇷</span>Français</button>
+        <button class="btn-lang" onclick="setLang('en')"><span class="flag">🇬🇧</span>English</button>
+        <button class="btn-lang" onclick="setLang('es')"><span class="flag">🇪🇸</span>Español</button>
+        <button class="btn-lang" onclick="setLang('zh')"><span class="flag">🇨🇳</span>中文</button>
+        <button class="btn-lang" onclick="setLang('hi')"><span class="flag">🇮🇳</span>हिन्दी</button>
+        <button class="btn-lang" onclick="setLang('ar')"><span class="flag">🇸🇦</span>العربية</button>
+      </div>
+    </div>
+
+    <!-- Couleur -->
+    <div class="s-section">
+      <span class="s-section-lbl" data-i18n="color_theme">Couleur d'accent</span>
+      <div class="color-grid" id="colorGrid"></div>
+      <div class="custom-row">
+        <span class="custom-lbl" data-i18n="custom_color">Personnalisée</span>
+        <div class="color-picker-wrap">
+          <input type="color" id="colorPicker" value="#e8ff47" oninput="applyCustomColor(this.value)">
+        </div>
+      </div>
+    </div>
+
+    <!-- Son -->
+    <div class="s-section">
+      <span class="s-section-lbl" data-i18n="audio">Son</span>
+      <div class="t-row">
+        <div>
+          <div class="t-lbl" data-i18n="sound_effects">Effets sonores</div>
+          <div class="t-sub" data-i18n="sound_sub">Sons à chaque ajout</div>
+        </div>
+        <button class="toggle on" id="soundToggle" onclick="toggleSound()"></button>
+      </div>
+    </div>
+
+    <!-- Record -->
+    <div class="s-section">
+      <span class="s-section-lbl" data-i18n="record_section">Record</span>
+      <div class="rec-row">
+        <input class="rec-input" type="number" id="recInput" min="0" max="99999" placeholder="0">
+        <button class="btn-rec-save" onclick="saveRecord()" data-i18n="save">Sauver</button>
+      </div>
+      <button class="btn-rec-reset" onclick="resetRecord()" data-i18n="reset_record">Réinitialiser le record</button>
+    </div>
+
+    <button class="btn-s-close" onclick="closeSettings()" data-i18n="close">Fermer</button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// TRANSLATIONS
+// ═══════════════════════════════════════════════════════
+const LANGS = {
+  fr:{ counter:'Compteur', pushups:'de Pompes', record:'Record total', sets:'Séries', last_set:'Dernière', avg:'Moy.', add_label:'Ajouter des pompes', pushup_s:'pompe', pushups_s:'pompes', undo:'↩ Annuler', history:'Historique', reset:'Réinitialiser', settings_title:'Paramètres', language:'Langue', color_theme:"Couleur d'accent", custom_color:'Personnalisée', audio:'Son', sound_effects:'Effets sonores', sound_sub:'Sons à chaque ajout', record_section:'Record', save:'Sauver', reset_record:'Réinitialiser le record', close:'Fermer', pushups_label:'pompes', chrono:'Chronomètre', goal_msg:'💪 100 POMPES !', new_record:'🏆 NOUVEAU RECORD !', milestone:(m)=>`${m} / 100 !`, confirm_reset:'Réinitialiser la session ?', confirm_rec:'Remettre le record à zéro ?', no_history:'Aucune session enregistrée.', hist_title:'📋 Historique :', hist_line:(t,s,d)=>`${t} pompes — ${s} séries — ${d}` },
+  en:{ counter:'Push-up', pushups:'Counter', record:'Total record', sets:'Sets', last_set:'Last', avg:'Avg.', add_label:'Add push-ups', pushup_s:'push-up', pushups_s:'push-ups', undo:'↩ Undo', history:'History', reset:'Reset', settings_title:'Settings', language:'Language', color_theme:'Accent color', custom_color:'Custom', audio:'Sound', sound_effects:'Sound effects', sound_sub:'Sound on each add', record_section:'Record', save:'Save', reset_record:'Reset record', close:'Close', pushups_label:'push-ups', chrono:'Stopwatch', goal_msg:'💪 100 PUSH-UPS!', new_record:'🏆 NEW RECORD!', milestone:(m)=>`${m} / 100!`, confirm_reset:'Reset this session?', confirm_rec:'Reset record to zero?', no_history:'No session recorded.', hist_title:'📋 History:', hist_line:(t,s,d)=>`${t} push-ups — ${s} sets — ${d}` },
+  es:{ counter:'Contador', pushups:'de Flexiones', record:'Récord total', sets:'Series', last_set:'Última', avg:'Med.', add_label:'Añadir flexiones', pushup_s:'flexión', pushups_s:'flexiones', undo:'↩ Deshacer', history:'Historial', reset:'Reiniciar', settings_title:'Ajustes', language:'Idioma', color_theme:'Color de acento', custom_color:'Personalizado', audio:'Sonido', sound_effects:'Efectos de sonido', sound_sub:'Sonido en cada adición', record_section:'Récord', save:'Guardar', reset_record:'Reiniciar récord', close:'Cerrar', pushups_label:'flexiones', chrono:'Cronómetro', goal_msg:'💪 ¡100 FLEXIONES!', new_record:'🏆 ¡NUEVO RÉCORD!', milestone:(m)=>`${m} / 100!`, confirm_reset:'¿Reiniciar sesión?', confirm_rec:'¿Poner el récord a cero?', no_history:'No hay sesiones.', hist_title:'📋 Historial:', hist_line:(t,s,d)=>`${t} flex — ${s} series — ${d}` },
+  zh:{ counter:'俯卧撑', pushups:'计数器', record:'总记录', sets:'组数', last_set:'上组', avg:'平均', add_label:'添加俯卧撑', pushup_s:'个', pushups_s:'个', undo:'↩ 撤销', history:'历史', reset:'重置', settings_title:'设置', language:'语言', color_theme:'强调色', custom_color:'自定义', audio:'声音', sound_effects:'音效', sound_sub:'每次添加时播放', record_section:'记录', save:'保存', reset_record:'重置记录', close:'关闭', pushups_label:'个', chrono:'计时器', goal_msg:'💪 100个！', new_record:'🏆 新纪录！', milestone:(m)=>`${m}/100！`, confirm_reset:'重置本次训练？', confirm_rec:'将记录清零？', no_history:'暂无记录。', hist_title:'📋 历史：', hist_line:(t,s,d)=>`${t}个 ${s}组 ${d}` },
+  hi:{ counter:'पुश-अप', pushups:'काउंटर', record:'कुल रिकॉर्ड', sets:'सेट', last_set:'आखिरी', avg:'औसत', add_label:'पुश-अप जोड़ें', pushup_s:'पुश-अप', pushups_s:'पुश-अप', undo:'↩ पूर्ववत', history:'इतिहास', reset:'रीसेट', settings_title:'सेटिंग्स', language:'भाषा', color_theme:'रंग थीम', custom_color:'कस्टम', audio:'ध्वनि', sound_effects:'ध्वनि प्रभाव', sound_sub:'जोड़ने पर आवाज़', record_section:'रिकॉर्ड', save:'सहेजें', reset_record:'रिकॉर्ड रीसेट', close:'बंद', pushups_label:'पुश-अप', chrono:'स्टॉपवॉच', goal_msg:'💪 100 पुश-अप!', new_record:'🏆 नया रिकॉर्ड!', milestone:(m)=>`${m}/100!`, confirm_reset:'रीसेट करें?', confirm_rec:'रिकॉर्ड शून्य करें?', no_history:'कोई सत्र नहीं।', hist_title:'📋 इतिहास:', hist_line:(t,s,d)=>`${t} पुश-अप ${s} सेट ${d}` },
+  ar:{ counter:'عداد', pushups:'تمارين الضغط', record:'الرقم القياسي', sets:'جولات', last_set:'الأخيرة', avg:'متوسط', add_label:'إضافة تمارين', pushup_s:'ضغطة', pushups_s:'ضغطات', undo:'↩ تراجع', history:'السجل', reset:'إعادة', settings_title:'الإعدادات', language:'اللغة', color_theme:'لون التمييز', custom_color:'مخصص', audio:'الصوت', sound_effects:'المؤثرات الصوتية', sound_sub:'صوت عند كل إضافة', record_section:'الرقم القياسي', save:'حفظ', reset_record:'إعادة الرقم القياسي', close:'إغلاق', pushups_label:'ضغطة', chrono:'الموقت', goal_msg:'💪 100 ضغطة!', new_record:'🏆 رقم قياسي!', milestone:(m)=>`${m}/100!`, confirm_reset:'إعادة تعيين؟', confirm_rec:'إعادة الرقم إلى الصفر؟', no_history:'لا توجد جلسات.', hist_title:'📋 السجل:', hist_line:(t,s,d)=>`${t} ضغطة ${s} جولة ${d}` }
+};
+
+// ═══════════════════════════════════════════════════════
+// COLOR THEMES
+// ═══════════════════════════════════════════════════════
+const THEMES = [
+  { id:'rainbow', label:'Arc-en-ciel', hex:'rainbow', bg:'#06030d' },
+  { id:'yellow',  label:'Jaune',       hex:'#e8ff47', bg:'#0a0a0a' },
+  { id:'cyan',    label:'Cyan',        hex:'#00f5ff', bg:'#020b0d' },
+  { id:'orange',  label:'Orange',      hex:'#ff7b2c', bg:'#0d0603' },
+  { id:'pink',    label:'Rose',        hex:'#ff4fd8', bg:'#0d0309' },
+  { id:'green',   label:'Vert',        hex:'#39ff14', bg:'#020d00' },
+  { id:'purple',  label:'Violet',      hex:'#bf7fff', bg:'#07030f' },
+  { id:'red',     label:'Rouge',       hex:'#ff3b3b', bg:'#0d0202' },
+  { id:'white',   label:'Blanc',       hex:'#ffffff', bg:'#0a0a0a' },
+  { id:'gold',    label:'Or',          hex:'#ffd700', bg:'#0a0800' },
+  { id:'teal',    label:'Teal',        hex:'#00e5a0', bg:'#020d07' },
+  { id:'sky',     label:'Ciel',        hex:'#60b4ff', bg:'#020610' },
+];
+
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+let total    = parseInt(localStorage.getItem('pu_total')   || '0');
+let series   = JSON.parse(localStorage.getItem('pu_series')  || '[]');
+let record   = parseInt(localStorage.getItem('pu_record')  || '0');
+let sessions = JSON.parse(localStorage.getItem('pu_sessions')|| '[]');
+let lastGoal = parseInt(localStorage.getItem('pu_lastgoal') || '-1');
+let soundOn  = localStorage.getItem('pu_sound') !== 'off';
+let lang     = localStorage.getItem('pu_lang')  || 'en';
+let themeId  = localStorage.getItem('pu_theme') || 'rainbow';
+let isRainbow = themeId === 'rainbow';
+
+// ═══════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════
+function tr(k) { const v = LANGS[lang][k]; return (v !== undefined ? v : (LANGS.fr[k] || k)); }
+
+function hexToRgb(hex) {
+  return [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16)];
+}
+
+function darken(hex, f=0.7) {
+  const [r,g,b] = hexToRgb(hex);
+  const h = v => Math.round(v*f).toString(16).padStart(2,'0');
+  return '#'+h(r)+h(g)+h(b);
+}
+
+// ═══════════════════════════════════════════════════════
+// THEME ENGINE
+// ═══════════════════════════════════════════════════════
+function applyTheme(id) {
+  themeId  = id;
+  isRainbow = (id === 'rainbow');
+  const root = document.documentElement;
+  const fill = document.getElementById('gaugeFill');
+  const svg  = document.getElementById('gaugeSvg');
+
+  if (isRainbow) {
+    root.style.setProperty('--accent',     '#bf60ff');
+    root.style.setProperty('--accent2',    '#8833cc');
+    root.style.setProperty('--accent-rgb', '191,96,255');
+    root.style.setProperty('--bg',         '#06030d');
+    document.body.style.background = '#06030d';
+    fill.setAttribute('stroke', 'url(#rbGrad)');
+    svg.style.filter = 'drop-shadow(0 0 20px rgba(180,80,255,0.4))';
+    // rainbow text on counter
+    document.getElementById('counterEl').classList.add('rainbow-text');
+    document.getElementById('recordVal').classList.remove('rainbow-text');
+  } else {
+    const t = THEMES.find(x => x.id === id);
+    if (!t) return;
+    const [r,g,b] = hexToRgb(t.hex);
+    root.style.setProperty('--accent',     t.hex);
+    root.style.setProperty('--accent2',    darken(t.hex, 0.72));
+    root.style.setProperty('--accent-rgb', `${r},${g},${b}`);
+    root.style.setProperty('--bg',         t.bg);
+    document.body.style.background = t.bg;
+    fill.setAttribute('stroke', t.hex);
+    svg.style.filter = `drop-shadow(0 0 16px rgba(${r},${g},${b},0.25))`;
+    document.getElementById('counterEl').classList.remove('rainbow-text');
+    document.getElementById('recordVal').classList.remove('rainbow-text');
+  }
+
+  localStorage.setItem('pu_theme', id);
+  highlightThemeBtns();
+  // update gauge ticks
+  refreshTicks();
+}
+
+function applyCustomColor(hex) {
+  themeId  = 'custom';
+  isRainbow = false;
+  const [r,g,b] = hexToRgb(hex);
+  const root = document.documentElement;
+  root.style.setProperty('--accent',     hex);
+  root.style.setProperty('--accent2',    darken(hex, 0.72));
+  root.style.setProperty('--accent-rgb', `${r},${g},${b}`);
+  const fill = document.getElementById('gaugeFill');
+  const svg  = document.getElementById('gaugeSvg');
+  fill.setAttribute('stroke', hex);
+  svg.style.filter = `drop-shadow(0 0 16px rgba(${r},${g},${b},0.25))`;
+  document.getElementById('counterEl').classList.remove('rainbow-text');
+  document.getElementById('recordVal').classList.remove('rainbow-text');
+  localStorage.setItem('pu_theme', 'custom');
+  localStorage.setItem('pu_custom_color', hex);
+  highlightThemeBtns();
+  refreshTicks();
+}
+
+function highlightThemeBtns() {
+  document.querySelectorAll('.btn-theme').forEach(b => {
+    b.classList.toggle('on', b.dataset.tid === themeId);
+  });
+}
+
+function buildColorGrid() {
+  const grid = document.getElementById('colorGrid');
+  grid.innerHTML = '';
+  THEMES.forEach(t => {
+    const b = document.createElement('button');
+    b.className = 'btn-theme';
+    b.dataset.tid = t.id;
+    if (t.id === 'rainbow') {
+      b.style.cssText = 'background:linear-gradient(135deg,#ff0080,#ff8800,#ffe000,#00ff88,#00cfff,#a040ff,#ff0080);background-size:300% 300%;animation:rbBtn 3s ease infinite;';
+    } else {
+      b.style.background = t.hex;
+    }
+    b.title = t.label;
+    b.onclick = () => { applyTheme(t.id); };
+    grid.appendChild(b);
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// PARTICLES
+// ═══════════════════════════════════════════════════════
+const canvas = document.getElementById('particleCanvas');
+const pctx   = canvas.getContext('2d');
+let particles = [];
+const RB_COLORS = ['#ff0080','#ff7700','#ffe000','#00ff88','#00cfff','#a040ff','#ff44bb'];
+
+function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+function spawnBurst(x, y, count, big) {
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = (big ? 3.5 : 1.8) + Math.random() * (big ? 5 : 3);
+    const color = isRainbow ? RB_COLORS[Math.floor(Math.random()*RB_COLORS.length)] : accent;
+    const [r,g,b] = hexToRgb(color.trim().startsWith('#') ? color.trim() : '#bf60ff');
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - (big ? 3 : 1.5),
+      life: 1,
+      decay: 0.016 + Math.random() * 0.022,
+      size: (big ? 4 : 2) + Math.random() * (big ? 7 : 4),
+      r, g, b,
+      square: Math.random() < 0.4,
+      rot: Math.random() * Math.PI * 2,
+      rotV: (Math.random() - 0.5) * 0.25
+    });
+  }
+}
+
+function particleLoop() {
+  pctx.clearRect(0, 0, canvas.width, canvas.height);
+  particles = particles.filter(p => p.life > 0);
+  for (const p of particles) {
+    p.x  += p.vx; p.y  += p.vy; p.vy += 0.16;
+    p.life -= p.decay; p.rot += p.rotV;
+    pctx.save();
+    pctx.globalAlpha = Math.max(0, p.life);
+    pctx.fillStyle   = `rgb(${p.r},${p.g},${p.b})`;
+    pctx.translate(p.x, p.y); pctx.rotate(p.rot);
+    if (p.square) { pctx.fillRect(-p.size/2, -p.size/2, p.size, p.size); }
+    else          { pctx.beginPath(); pctx.arc(0,0,p.size,0,Math.PI*2); pctx.fill(); }
+    pctx.restore();
+  }
+  requestAnimationFrame(particleLoop);
+}
+particleLoop();
+
+function burstBtn(btn, count, big) {
+  const rc = btn.getBoundingClientRect();
+  spawnBurst(rc.left + rc.width/2, rc.top + rc.height/2, count, big);
+}
+
+function burstCenter(count) {
+  spawnBurst(window.innerWidth/2, window.innerHeight/2, count, true);
+}
+
+// ═══════════════════════════════════════════════════════
+// AUDIO
+// ═══════════════════════════════════════════════════════
+let audioCtx = null;
+function getAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function playAdd(amount) {
+  if (!soundOn) return;
+  try {
+    const ctx = getAudio(), now = ctx.currentTime;
+    const pitch = amount===1?1 : amount===5?1.2 : amount===10?1.5 : 1.9;
+    const o1=ctx.createOscillator(), g1=ctx.createGain();
+    o1.type='sine'; o1.frequency.setValueAtTime(300*pitch,now); o1.frequency.exponentialRampToValueAtTime(600*pitch,now+0.08);
+    g1.gain.setValueAtTime(0.22,now); g1.gain.exponentialRampToValueAtTime(0.001,now+0.15);
+    o1.connect(g1); g1.connect(ctx.destination); o1.start(now); o1.stop(now+0.15);
+    const o2=ctx.createOscillator(), g2=ctx.createGain();
+    o2.type='triangle'; o2.frequency.setValueAtTime(900*pitch,now+0.05);
+    g2.gain.setValueAtTime(0.12,now+0.05); g2.gain.exponentialRampToValueAtTime(0.001,now+0.2);
+    o2.connect(g2); g2.connect(ctx.destination); o2.start(now+0.05); o2.stop(now+0.2);
+  } catch(e) {}
+}
+
+function playMilestone() {
+  if (!soundOn) return;
+  try {
+    const ctx=getAudio(), now=ctx.currentTime;
+    [0,0.14,0.28].forEach((d,i)=>{
+      const o=ctx.createOscillator(), g=ctx.createGain();
+      o.type='sine'; o.frequency.setValueAtTime([523,659,784][i],now+d);
+      g.gain.setValueAtTime(0.18,now+d); g.gain.exponentialRampToValueAtTime(0.001,now+d+0.22);
+      o.connect(g); g.connect(ctx.destination); o.start(now+d); o.stop(now+d+0.22);
+    });
+  } catch(e) {}
+}
+
+function playGoal() {
+  if (!soundOn) return;
+  try {
+    const ctx=getAudio(), now=ctx.currentTime;
+    [523,659,784,1046,1318].forEach((f,i)=>{
+      const o=ctx.createOscillator(), g=ctx.createGain();
+      o.type='sine'; o.frequency.setValueAtTime(f,now+i*0.08);
+      g.gain.setValueAtTime(0.18,now+i*0.08); g.gain.exponentialRampToValueAtTime(0.001,now+i*0.08+0.5);
+      o.connect(g); g.connect(ctx.destination); o.start(now+i*0.08); o.stop(now+i*0.08+0.5);
+    });
+  } catch(e) {}
+}
+
+// ═══════════════════════════════════════════════════════
+// CORE LOGIC
+// ═══════════════════════════════════════════════════════
+const GOAL = 100;
+const CIRC = 565.48; // 2*pi*90
+
+function add(amount, btn) {
+  const prev = total;
+  total  += amount;
+  series.push(amount);
+  save();
+
+  // ripple
+  const rp = document.createElement('div'); rp.className='ripple'; btn.appendChild(rp); setTimeout(()=>rp.remove(), 450);
+  // particles
+  burstBtn(btn, amount===1?8 : amount===5?18 : amount===10?30 : 50, amount>=20);
+  // haptic
+  if (navigator.vibrate) navigator.vibrate(amount===1?20 : amount===5?35 : amount===10?50 : 70);
+  // sound
+  playAdd(amount);
+  // ui
+  refreshUI();
+  // milestones
+  checkMilestones(prev, total);
+  // goal
+  const prevG = Math.floor(prev / GOAL), newG = Math.floor(total / GOAL);
+  if (newG > prevG && newG > lastGoal) {
+    lastGoal = newG;
+    localStorage.setItem('pu_lastgoal', lastGoal);
+    triggerGoal();
+  }
+}
+
+function checkMilestones(prev, curr) {
+  const pp = prev % GOAL;
+  const cp = (curr % GOAL === 0 && curr > prev) ? GOAL : curr % GOAL;
+  for (const m of [25, 50, 75]) {
+    if (pp < m && cp >= m) {
+      showMilestone(m);
+      playMilestone();
+      const gw = document.querySelector('.gauge-wrap').getBoundingClientRect();
+      spawnBurst(gw.left + gw.width/2, gw.top + gw.height/2, 22, false);
+      break;
+    }
+  }
+}
+
+function showMilestone(m) {
+  const badge = document.getElementById('milestoneBadge');
+  badge.textContent = tr('milestone')(m);
+  badge.classList.add('show');
+  setTimeout(() => badge.classList.remove('show'), 1800);
+}
+
+function triggerGoal() {
+  // save session
+  sessions.unshift({ total: lastGoal * GOAL, sets: series.length, date: new Date().toLocaleDateString() });
+  if (sessions.length > 10) sessions = sessions.slice(0, 10);
+  localStorage.setItem('pu_sessions', JSON.stringify(sessions));
+  // effects
+  playGoal();
+  if (navigator.vibrate) navigator.vibrate([80,50,80,50,150]);
+  burstCenter(90);
+  // toast
+  const toast = document.getElementById('goalToast');
+  toast.textContent = tr('goal_msg');
+  toast.classList.remove('pop');
+  void toast.offsetWidth;
+  toast.classList.add('pop');
+}
+
+function refreshUI() {
+  // counter
+  const cel = document.getElementById('counterEl');
+  cel.textContent = total;
+  cel.classList.remove('pop'); void cel.offsetWidth; cel.classList.add('pop');
+
+  // gauge
+  const progress = (total % GOAL === 0 && total > 0) ? GOAL : total % GOAL;
+  document.getElementById('gaugeFill').style.strokeDashoffset = CIRC * (1 - Math.min(progress / GOAL, 1));
+  document.getElementById('gaugePct').textContent = progress + ' / ' + GOAL;
+
+  // ticks
+  refreshTicks(progress);
+
+  // series stats
+  document.getElementById('seriesCount').textContent = series.length;
+  if (series.length > 0) {
+    document.getElementById('lastAdded').textContent = '+' + series[series.length - 1];
+    document.getElementById('avgSeries').textContent = Math.round(series.reduce((a,b)=>a+b,0) / series.length);
+  } else {
+    document.getElementById('lastAdded').textContent = '—';
+    document.getElementById('avgSeries').textContent = '—';
+  }
+
+  // record
+  if (total > record) { record = total; localStorage.setItem('pu_record', record); }
+  document.getElementById('recordVal').textContent = record > 0 ? record : '—';
+}
+
+function refreshTicks(progress) {
+  if (progress === undefined) {
+    const p = (total % GOAL === 0 && total > 0) ? GOAL : total % GOAL;
+    progress = p;
+  }
+  const accentColor = isRainbow ? '#bf60ff' : getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+  document.getElementById('tick25').setAttribute('fill', progress >= 25 ? accentColor : '#333');
+  document.getElementById('tick50').setAttribute('fill', progress >= 50 ? accentColor : '#333');
+  document.getElementById('tick75').setAttribute('fill', progress >= 75 ? accentColor : '#333');
+}
+
+function undoLast() {
+  if (!series.length) return;
+  const last = series.pop();
+  total = Math.max(0, total - last);
+  save();
+  if (navigator.vibrate) navigator.vibrate(20);
+  refreshUI();
+}
+
+function resetSession() {
+  if (total === 0) return;
+  if (!confirm(tr('confirm_reset'))) return;
+  doReset();
+}
+
+function doReset() {
+  total = 0; series = []; lastGoal = -1;
+  localStorage.setItem('pu_lastgoal', '-1');
+  save();
+  refreshUI();
+  document.getElementById('gaugeFill').style.strokeDashoffset = CIRC;
+  document.getElementById('gaugePct').textContent = '0 / 100';
+  document.getElementById('counterEl').textContent = '0';
+  ['tick25','tick50','tick75'].forEach(id => document.getElementById(id).setAttribute('fill','#333'));
+  chronoReset();
+}
+
+function save() {
+  localStorage.setItem('pu_total',  total);
+  localStorage.setItem('pu_series', JSON.stringify(series));
+}
+
+function showHistory() {
+  if (!sessions.length) { alert(tr('no_history')); return; }
+  const lines = sessions.map((s,i) => `${i+1}. ${tr('hist_line')(s.total, s.sets, s.date)}`).join('\n');
+  alert(tr('hist_title') + '\n\n' + lines);
+}
+
+// ═══════════════════════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════════════════════
+function openSettings() {
+  document.getElementById('recInput').value = record > 0 ? record : '';
+  highlightThemeBtns();
+  document.getElementById('sOverlay').classList.add('open');
+}
+function closeSettings() { document.getElementById('sOverlay').classList.remove('open'); }
+function overlayClick(e) { if (e.target.id === 'sOverlay') closeSettings(); }
+
+function toggleSound() {
+  soundOn = !soundOn;
+  document.getElementById('soundToggle').classList.toggle('on', soundOn);
+  localStorage.setItem('pu_sound', soundOn ? 'on' : 'off');
+  if (soundOn) playAdd(5);
+}
+
+function saveRecord() {
+  const val = parseInt(document.getElementById('recInput').value);
+  if (isNaN(val) || val < 0) return;
+  record = val;
+  localStorage.setItem('pu_record', record);
+  document.getElementById('recordVal').textContent = record > 0 ? record : '—';
+  if (navigator.vibrate) navigator.vibrate(30);
+  document.getElementById('recInput').blur();
+}
+
+function resetRecord() {
+  if (!confirm(tr('confirm_rec'))) return;
+  record = 0;
+  localStorage.setItem('pu_record', 0);
+  document.getElementById('recInput').value = '';
+  document.getElementById('recordVal').textContent = '—';
+}
+
+// ═══════════════════════════════════════════════════════
+// I18N
+// ═══════════════════════════════════════════════════════
+function applyLang() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const k = el.getAttribute('data-i18n');
+    const v = LANGS[lang][k];
+    if (typeof v === 'string') el.textContent = v;
+  });
+  document.body.style.direction = lang === 'ar' ? 'rtl' : 'ltr';
+  document.querySelectorAll('.btn-lang').forEach(b => {
+    const lc = b.getAttribute('onclick').match(/'(\w+)'/);
+    b.classList.toggle('on', lc && lc[1] === lang);
+  });
+  document.getElementById('recordVal').textContent = record > 0 ? record : '—';
+}
+
+function setLang(l) { lang = l; localStorage.setItem('pu_lang', l); applyLang(); }
+
+// ═══════════════════════════════════════════════════════
+// CHRONO
+// ═══════════════════════════════════════════════════════
+let chRunning = false, chElapsed = 0, chStart = null, chRaf = null;
+
+function chronoToggle() {
+  const btn = document.getElementById('btnChrono');
+  const disp = document.getElementById('chronoTime');
+  if (!chRunning) {
+    chRunning = true; chStart = performance.now();
+    disp.classList.add('running');
+    btn.textContent = '⏸ Pause';
+    btn.classList.replace('go','pause');
+    chTick();
+  } else {
+    chElapsed += performance.now() - chStart;
+    chRunning = false; cancelAnimationFrame(chRaf);
+    disp.classList.remove('running');
+    btn.textContent = '▶ Start';
+    btn.classList.replace('pause','go');
+  }
+}
+
+function chTick() {
+  if (!chRunning) return;
+  const ms = chElapsed + (performance.now() - chStart);
+  const s  = Math.floor(ms / 1000);
+  document.getElementById('chronoTime').textContent =
+    String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0');
+  chRaf = requestAnimationFrame(chTick);
+}
+
+function chronoReset() {
+  chRunning = false; cancelAnimationFrame(chRaf);
+  chElapsed = 0; chStart = null;
+  const btn  = document.getElementById('btnChrono');
+  const disp = document.getElementById('chronoTime');
+  disp.textContent = '00:00'; disp.classList.remove('running');
+  btn.textContent  = '▶ Start';
+  btn.className    = 'btn-chr go';
+}
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+buildColorGrid();
+document.getElementById('soundToggle').classList.toggle('on', soundOn);
+
+// restore theme
+if (themeId === 'custom') {
+  const saved = localStorage.getItem('pu_custom_color') || '#e8ff47';
+  document.getElementById('colorPicker').value = saved;
+  applyCustomColor(saved);
+} else {
+  applyTheme(themeId);
+}
+
+applyLang();
+refreshUI();
+</script>
+</body>
+</html>
